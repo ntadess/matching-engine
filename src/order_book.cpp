@@ -102,6 +102,14 @@ void OrderBook::add_order(uint64_t id, Side side, int32_t price_ticks, uint32_t 
     // add to order_lookup_
     // insert into level
 
+    //call first 
+    uint32_t remaining_quantity = match_incoming_order(side, price_ticks, quantity);
+
+    if (remaining_quantity == 0) {
+        return;
+    }
+
+
     int index = index_for_price(price_ticks);
     auto order = std::make_unique<Order>();
     order->id = id;
@@ -112,6 +120,7 @@ void OrderBook::add_order(uint64_t id, Side side, int32_t price_ticks, uint32_t 
     Order* raw = order.get();
     order_lookup_[id] = std::move(order);
     insert_into_level(raw, index);
+
 }
 
 bool OrderBook::cancel_order(uint64_t id) {
@@ -153,6 +162,50 @@ const PriceLevel& OrderBook::ask_level_at_price(int32_t price_ticks) const {
     int index = index_for_price(price_ticks);
     return level_for(Side::Ask, index);
 
+}
+
+bool OrderBook::crosses(Side side, int32_t price_ticks) const {
+    if (side == Side::Bid) {
+        auto ask = best_ask_price();
+        return ask.has_value() && price_ticks >= *ask;
+    }
+    auto bid = best_bid_price();
+    return bid.has_value() && price_ticks <= *bid;
+}
+
+Side OrderBook::opposite_side(Side side) const {
+    return (side == Side::Bid)? Side::Ask : Side::Bid;
+}
+
+int OrderBook::best_index_for(Side side) const {
+    return (side == Side::Bid) ? best_bid_index_ : best_ask_index_;
+}
+
+uint32_t OrderBook::match_incoming_order(Side side, int32_t price_ticks, uint32_t quantity){
+    uint32_t remaining_quantity = quantity;
+    Side opposite = opposite_side(side);
+
+
+    while (remaining_quantity > 0 && crosses(side, price_ticks)) {
+        int opp_index = best_index_for(opposite);
+        PriceLevel& opp_level = level_for(opposite, opp_index);
+        Order * resting = opp_level.head;
+
+        if (resting->quantity <= remaining_quantity) { // fully filled
+            uint32_t filled = resting->quantity;
+            remaining_quantity -= filled;
+
+            uint64_t resting_id = resting->id;
+            unlink_from_level(resting, opp_index);
+            order_lookup_.erase(resting_id);
+        } else { //partially filled
+            resting->quantity -= remaining_quantity;
+            opp_level.total_quantity -= remaining_quantity;
+            remaining_quantity = 0;
+           
+        }
+    }
+    return remaining_quantity;
 }
 
 } // namespace engine

@@ -46,7 +46,11 @@ private:
     void insert_into_level(Order *order, int index);
     void unlink_from_level(Order *order, int index);
 
-
+    Side opposite_side(Side side) const;
+    bool crosses(Side side, int32_t price_ticks) const;
+    
+    int best_index_for(Side side) const;
+    uint32_t match_incoming_order(Side side, int32_t price_ticks, uint32_t quantity);
 };
 
 }// namespace engine
