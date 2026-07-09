@@ -51,6 +51,10 @@ private:
     
     int best_index_for(Side side) const;
     uint32_t match_incoming_order(Side side, int32_t price_ticks, uint32_t quantity);
+
+    bool needs_recenter() const;
+    void recenter();
+    int32_t compute_new_reference() const;
 };
 
 }// namespace engine

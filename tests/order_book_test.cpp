@@ -194,3 +194,16 @@ TEST(OrderBookMatching, NonCrossingOrderJustRests) {
     ASSERT_TRUE(book.best_ask_price().has_value());
     EXPECT_EQ(*book.best_ask_price(), 10005);
 }
+
+TEST(OrderBookRecenter, TriggersWhenBestIndexNearEdge){
+    auto book = make_book();
+    book.add_order(1, Side::Bid, 9500, 100);
+    book.add_order(2, Side::Bid, 9000, 100); // not best bid wont change anything
+    book.add_order(3, Side::Bid, 10000, 100); // best bid at edge triggers recenter
+
+    ASSERT_TRUE(book.best_bid_price().has_value());
+    EXPECT_EQ(*book.best_bid_price(), 10000);
+    EXPECT_EQ(book.bid_level_at_price(10000).total_quantity, 100u);
+
+
+}
