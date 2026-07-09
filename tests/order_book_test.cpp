@@ -134,3 +134,63 @@ TEST(OrderBookResets, LevelResetOrderHeadTail){
     book.add_order(3, Side::Bid, 9995, 25);
     EXPECT_EQ(level.head->id, 3u);
 }
+
+TEST(OrderBookMatching, FullyFillsAgainstRestingOrderOfEqualQuantity) {
+    auto book = make_book();
+    book.add_order(1, Side::Ask, 10005, 100);
+
+    book.add_order(2, Side::Bid, 10005, 100);
+
+    EXPECT_FALSE(book.best_ask_price().has_value());
+    EXPECT_FALSE(book.best_bid_price().has_value());
+}
+
+TEST(OrderBookMatching, PartialFillOfRestingOrderLeavesRemainder) {
+    auto book = make_book();
+    book.add_order(1, Side::Ask, 10005, 100);
+
+    book.add_order(2, Side::Bid, 10005, 40);
+
+    ASSERT_TRUE(book.best_ask_price().has_value());
+    EXPECT_EQ(*book.best_ask_price(), 10005);
+    EXPECT_EQ(book.ask_level_at_price(10005).total_quantity, 60u);
+    EXPECT_FALSE(book.best_bid_price().has_value());
+}
+
+TEST(OrderBookMatching, IncomingOrderRestsWithLeftoverAfterPartialMatch) {
+    auto book = make_book();
+    book.add_order(1, Side::Ask, 10005, 50);
+
+    book.add_order(2, Side::Bid, 10005, 80);
+
+    EXPECT_FALSE(book.best_ask_price().has_value());
+    ASSERT_TRUE(book.best_bid_price().has_value());
+    EXPECT_EQ(*book.best_bid_price(), 10005);
+    EXPECT_EQ(book.bid_level_at_price(10005).total_quantity, 30u);
+}
+
+TEST(OrderBookMatching, WalksMultipleLevelsUntilFilledOrNoLongerCrossing) {
+    auto book = make_book();
+    book.add_order(1, Side::Ask, 10001, 50);
+    book.add_order(2, Side::Ask, 10002, 50);
+    book.add_order(3, Side::Ask, 10003, 50);
+
+    book.add_order(4, Side::Bid, 10002, 100);
+
+    EXPECT_FALSE(book.bid_level_at_price(10002).total_quantity);
+    ASSERT_TRUE(book.best_ask_price().has_value());
+    EXPECT_EQ(*book.best_ask_price(), 10003);
+    EXPECT_EQ(book.ask_level_at_price(10003).total_quantity, 50u);
+}
+
+TEST(OrderBookMatching, NonCrossingOrderJustRests) {
+    auto book = make_book();
+    book.add_order(1, Side::Ask, 10005, 100);
+
+    book.add_order(2, Side::Bid, 9995, 50);
+
+    ASSERT_TRUE(book.best_bid_price().has_value());
+    EXPECT_EQ(*book.best_bid_price(), 9995);
+    ASSERT_TRUE(book.best_ask_price().has_value());
+    EXPECT_EQ(*book.best_ask_price(), 10005);
+}

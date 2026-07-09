@@ -114,7 +114,7 @@ void OrderBook::add_order(uint64_t id, Side side, int32_t price_ticks, uint32_t 
     auto order = std::make_unique<Order>();
     order->id = id;
     order->price_ticks = price_ticks;
-    order->quantity = quantity;
+    order->quantity = remaining_quantity;
     order->side = side;
 
     Order* raw = order.get();
