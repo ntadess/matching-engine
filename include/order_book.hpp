@@ -13,7 +13,7 @@ namespace engine {
 
 class OrderBook {
 public:
-    Orderbook(int32_t reference_price_ticks, int32_t window_ticks);
+    OrderBook(int32_t reference_price_ticks, int32_t window_ticks);
 
     void add_order(uint64_t id, Side side, int32_t price_ticks, uint32_t quantity);
     bool cancel_order(uint64_t id);
@@ -21,9 +21,9 @@ public:
     std::optional<int32_t> best_bid_price() const;
     std::optional<int32_t> best_ask_price() const;
 
-    const Pricelevel& bid_level_at_price(int32_t price_ticks) const;
-    const Pricelevel& ask_level_at_price(int32_t price_ticks) const;
-};
+    const PriceLevel& bid_level_at_price(int32_t price_ticks) const;
+    const PriceLevel& ask_level_at_price(int32_t price_ticks) const;
+
 
 private:
     int32_t reference_price_ticks_;
@@ -47,4 +47,6 @@ private:
     void unlink_from_level(Order *order, int index);
 
 
-}; // namespace engine
+};
+
+}// namespace engine

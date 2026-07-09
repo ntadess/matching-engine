@@ -8,7 +8,7 @@ OrderBook::OrderBook(int32_t reference_price_ticks, int32_t window_ticks)
       bid_levels_(static_cast<size_t>(2 * window_ticks + 1)),
       ask_levels_(static_cast<size_t>(2 * window_ticks + 1)) {}
 
-}
+
 
 int OrderBook::index_for_price(int32_t price_ticks) const { // replace with resizing logic later
     int index = price_ticks - reference_price_ticks_ + window_ticks_;
@@ -128,6 +128,31 @@ bool OrderBook::cancel_order(uint64_t id) {
 
     order_lookup_.erase(it);
     return true;
-}a
+}
 
-// namespace engine
+std::optional<int32_t> OrderBook::best_bid_price() const{
+    if (best_bid_index_ == -1) {
+        return std::nullopt;
+    }
+    return price_for_index(best_bid_index_);
+}
+
+std::optional<int32_t> OrderBook::best_ask_price() const{
+    if (best_ask_index_ == -1) {
+        return std::nullopt;
+    }
+    return price_for_index(best_ask_index_);
+}
+
+const PriceLevel& OrderBook::bid_level_at_price(int32_t price_ticks) const {
+    int index = index_for_price(price_ticks);
+    return level_for(Side::Bid, index);
+}
+
+const PriceLevel& OrderBook::ask_level_at_price(int32_t price_ticks) const {
+    int index = index_for_price(price_ticks);
+    return level_for(Side::Ask, index);
+
+}
+
+} // namespace engine
