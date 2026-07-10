@@ -106,3 +106,30 @@ TEST(EngineEndToEnd, StopIsCleanAndJoinsBothThreads) {
     
     engine.stop();
 }
+
+TEST(EngineEndToEnd, RecorderCapturesRealLatency) {
+    constexpr uint16_t kPort = 46004;
+    Engine engine(kPort, 10000, 500, 100);
+
+    engine.start();
+
+    AddMessage msg;
+    msg.sequence = 0;
+    msg.id = 1;
+    msg.side = Side::Bid;
+    msg.price_ticks = 9990;
+    msg.quantity = 25;
+
+    uint8_t buffer[engine::ADD_MESSAGE_SIZE];
+    engine::encode_add_message(msg, buffer);
+    send_udp(kPort, buffer, sizeof(buffer));
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    double wire_to_book = engine.recorder().wire_to_book_percentile(0.5);
+    EXPECT_GT(wire_to_book, 0.0);
+   
+    EXPECT_LT(wire_to_book, 10'000'000.0);
+
+    engine.stop();
+}

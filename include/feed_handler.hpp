@@ -5,14 +5,15 @@
 #include <atomic>
 #include <thread>
 
-#include "spsc_queue.hpp"   // was: order_book.hpp
+#include "spsc_queue.hpp"   
 #include "messages.hpp"
+#include "latency_recorder.hpp"
 
 namespace engine {
 
 class FeedHandler {
 public:
-    FeedHandler(SpscQueue<FeedMessage, 1024>& queue, uint16_t port);  
+    FeedHandler(SpscQueue<FeedMessage, 1024>& queue, uint16_t port, LatencyRecorder* recorder = nullptr);  
     ~FeedHandler();
 
     FeedHandler(const FeedHandler&) = delete;
@@ -27,7 +28,9 @@ public:
     void stop();
 
 private:
-    SpscQueue<FeedMessage, 1024>& queue_;   
+    
+    SpscQueue<FeedMessage, 1024>& queue_;  
+    LatencyRecorder* recorder_ = nullptr;
     int socket_fd_ = -1;
     io_uring ring_{};
 

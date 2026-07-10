@@ -32,8 +32,6 @@ add_library(engine_core
   src/matching_thread.cpp
   src/engine.cpp
   include/latency_recorder.hpp
-
-
 )
 target_include_directories(engine_core PUBLIC include ${URING_INCLUDE_DIRS})
 target_link_libraries(engine_core PUBLIC ${URING_LIBRARIES})
@@ -42,5 +40,9 @@ target_link_libraries(engine_core PUBLIC ${URING_LIBRARIES})
 enable_testing()
 add_executable(engine_tests tests/order_book_test.cpp tests/messages_test.cpp tests/feed_handler_test.cpp tests/spsc_queue_test.cpp tests/matching_thread_test.cpp tests/engine_test.cpp tests/latency_reorder_test.cpp)
 target_link_libraries(engine_tests PRIVATE engine_core gtest_main)
+add_executable(replay_generator tools/replay_generator.cpp)
+target_link_libraries(replay_generator PRIVATE engine_core)
+add_executable(benchmark_runner tools/benchmark_runner.cpp)
+target_link_libraries(benchmark_runner PRIVATE engine_core)
 include(GoogleTest)
 gtest_discover_tests(engine_tests)

@@ -8,13 +8,16 @@
 
 namespace engine {
 
-FeedHandler::FeedHandler(SpscQueue<FeedMessage, 1024>& queue, uint16_t port) : queue_(queue) {
+FeedHandler::FeedHandler(SpscQueue<FeedMessage, 1024>& queue, uint16_t port,
+                          LatencyRecorder* recorder)
+    : queue_(queue), recorder_(recorder) {
     setup_socket(port);
 
     if (io_uring_queue_init(8, &ring_, 0) < 0) {
         throw std::runtime_error("failed to initialize io_uring");
     }
 }
+
 
 FeedHandler::~FeedHandler() {
     io_uring_queue_exit(&ring_);
@@ -55,15 +58,19 @@ void FeedHandler::process_message(const uint8_t* data, size_t len) {
     uint64_t sequence;
     std::memcpy(&sequence, data + 1, sizeof(sequence));
 
+    if (recorder_) recorder_->record_received(sequence);   // add — as early as possible
+
     if (!check_sequence(sequence)) {
         return;
     }
 
     if (type == MessageType::Add && len >= ADD_MESSAGE_SIZE) {
         AddMessage msg = decode_add_message(data);
+        if (recorder_) recorder_->record_decoded(sequence);   // add
         queue_.push(FeedMessage{msg});
     } else if (type == MessageType::Cancel && len >= CANCEL_MESSAGE_SIZE) {
         CancelMessage msg = decode_cancel_message(data);
+        if (recorder_) recorder_->record_decoded(sequence);   // add
         queue_.push(FeedMessage{msg});
     }
 }

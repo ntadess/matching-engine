@@ -8,12 +8,13 @@
 #include "spsc_queue.hpp"
 #include "messages.hpp"
 #include "order_book.hpp"
+#include "latency_recorder.hpp"
 
 namespace engine {
 
 class MatchingThread {
 public:
-    MatchingThread(SpscQueue<FeedMessage, 1024>& queue, OrderBook& book);
+    MatchingThread(SpscQueue<FeedMessage, 1024>& queue, OrderBook& book, LatencyRecorder* recorder = nullptr);
 
     // Not copyable or movable 
     MatchingThread(const MatchingThread&) = delete;
@@ -28,6 +29,7 @@ private:
 
     SpscQueue<FeedMessage, 1024>& queue_;
     OrderBook& book_;
+    LatencyRecorder* recorder_ = nullptr;
     std::thread matcher_thread_;
     std::atomic<bool> running_{false};
 };
