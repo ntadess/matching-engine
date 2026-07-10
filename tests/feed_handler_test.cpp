@@ -39,6 +39,7 @@ TEST(FeedHandlerEndToEnd, ReceivesAddMessageAndUpdatesOrderBook) {
     FeedHandler handler(book, kPort);
 
     AddMessage msg;
+    msg.sequence = 0;
     msg.id = 42;
     msg.side = Side::Bid;
     msg.price_ticks = 9995;
@@ -62,6 +63,7 @@ TEST(FeedHandlerEndToEnd, ReceivesCancelMessageAndRemovesOrder) {
     FeedHandler handler(book, kPort);
 
     CancelMessage msg;
+    msg.sequence = 0;
     msg.id = 7;
 
     uint8_t buffer[engine::CANCEL_MESSAGE_SIZE];
@@ -79,12 +81,14 @@ TEST(FeedHandlerEndToEnd, ProcessesMultipleMessagesInSequence) {
     FeedHandler handler(book, kPort);
 
     AddMessage add1;
+    add1.sequence = 0;
     add1.id = 1;
     add1.side = Side::Ask;
     add1.price_ticks = 10005;
     add1.quantity = 50;
 
     AddMessage add2;
+    add2.sequence = 1;
     add2.id = 2;
     add2.side = Side::Ask;
     add2.price_ticks = 10002;
@@ -102,4 +106,59 @@ TEST(FeedHandlerEndToEnd, ProcessesMultipleMessagesInSequence) {
 
     ASSERT_TRUE(book.best_ask_price().has_value());
     EXPECT_EQ(*book.best_ask_price(), 10002);
+}
+
+TEST(FeedHandlerSequencing, DetectsGapWhenSequenceSkips) {
+    constexpr uint16_t kPort = 45004;
+    OrderBook book(10000, 500);
+    FeedHandler handler(book, kPort);
+
+    AddMessage msg;
+    msg.sequence = 0;
+    msg.id = 1;
+    msg.side = Side::Bid;
+    msg.price_ticks = 9995;
+    msg.quantity = 100;
+
+    uint8_t buf[engine::ADD_MESSAGE_SIZE];
+    engine::encode_add_message(msg, buf);
+    send_udp(kPort, buf, sizeof(buf));
+    handler.run_for(1);
+
+    // Skip sequence 1 entirely -- jump straight to 2.
+    msg.sequence = 2;
+    msg.id = 2;
+    engine::encode_add_message(msg, buf);
+    send_udp(kPort, buf, sizeof(buf));
+    handler.run_for(1);
+
+    EXPECT_EQ(handler.gaps_detected(), 1u);
+    EXPECT_EQ(handler.duplicates_dropped(), 0u);
+    ASSERT_TRUE(book.best_bid_price().has_value());
+}
+
+TEST(FeedHandlerSequencing, DropsDuplicateMessage) {
+    constexpr uint16_t kPort = 45005;
+    OrderBook book(10000, 500);
+    FeedHandler handler(book, kPort);
+
+    AddMessage msg;
+    msg.sequence = 0;
+    msg.id = 5;
+    msg.side = Side::Bid;
+    msg.price_ticks = 9995;
+    msg.quantity = 100;
+
+    uint8_t buf[engine::ADD_MESSAGE_SIZE];
+    engine::encode_add_message(msg, buf);
+
+    send_udp(kPort, buf, sizeof(buf));
+    handler.run_for(1);
+
+    // Resend the exact same sequence number (simulates a retransmit/dup).
+    send_udp(kPort, buf, sizeof(buf));
+    handler.run_for(1);
+
+    EXPECT_EQ(handler.duplicates_dropped(), 1u);
+    EXPECT_EQ(handler.gaps_detected(), 0u);
 }

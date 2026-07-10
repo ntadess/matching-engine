@@ -52,6 +52,13 @@ void FeedHandler::process_message(const uint8_t* data, size_t len) {
 
     MessageType type = static_cast<MessageType>(data[0]);
 
+    uint64_t sequence;
+    std::memcpy(&sequence, data + 1, sizeof(sequence));
+
+    if (!check_sequence(sequence)) {
+        return;
+    }
+
     if (type == MessageType::Add && len >= ADD_MESSAGE_SIZE) {
         AddMessage msg = decode_add_message(data);
         book_.add_order(msg.id, msg.side, msg.price_ticks, msg.quantity);
@@ -78,5 +85,18 @@ void FeedHandler::run_for(int max_messages) {
         io_uring_cqe_seen(&ring_, cqe);
     }
 }
+
+bool FeedHandler::check_sequence(uint64_t sequence) {
+    if (sequence < expected_sequence_) {
+        ++duplicates_dropped_;
+        return false;
+    }
+    if (sequence > expected_sequence_) {
+        ++gaps_detected_;
+    }
+    expected_sequence_ = sequence + 1;
+    return true;
+}
+
 
 }  // namespace engine
