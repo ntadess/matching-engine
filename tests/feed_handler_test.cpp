@@ -6,12 +6,13 @@
 
 #include "feed_handler.hpp"
 #include "messages.hpp"
-#include "order_book.hpp"
+#include "spsc_queue.hpp"
 
 using engine::AddMessage;
 using engine::CancelMessage;
 using engine::FeedHandler;
-using engine::OrderBook;
+using engine::FeedMessage;
+using engine::SpscQueue;
 using engine::Side;
 
 namespace {
@@ -33,10 +34,10 @@ void send_udp(uint16_t port, const uint8_t* data, size_t len) {
 
 }  // namespace
 
-TEST(FeedHandlerEndToEnd, ReceivesAddMessageAndUpdatesOrderBook) {
+TEST(FeedHandlerEndToEnd, ReceivesAddMessageAndPushesToQueue) {
     constexpr uint16_t kPort = 45001;
-    OrderBook book(10000, 500);
-    FeedHandler handler(book, kPort);
+    SpscQueue<FeedMessage, 1024> queue;
+    FeedHandler handler(queue, kPort);
 
     AddMessage msg;
     msg.sequence = 0;
@@ -51,16 +52,21 @@ TEST(FeedHandlerEndToEnd, ReceivesAddMessageAndUpdatesOrderBook) {
 
     handler.run_for(1);
 
-    ASSERT_TRUE(book.best_bid_price().has_value());
-    EXPECT_EQ(*book.best_bid_price(), 9995);
+    auto popped = queue.pop();
+    ASSERT_TRUE(popped.has_value());
+    ASSERT_TRUE(std::holds_alternative<AddMessage>(*popped));
+
+    const auto& add = std::get<AddMessage>(*popped);
+    EXPECT_EQ(add.id, 42u);
+    EXPECT_EQ(add.side, Side::Bid);
+    EXPECT_EQ(add.price_ticks, 9995);
+    EXPECT_EQ(add.quantity, 100u);
 }
 
-TEST(FeedHandlerEndToEnd, ReceivesCancelMessageAndRemovesOrder) {
+TEST(FeedHandlerEndToEnd, ReceivesCancelMessageAndPushesToQueue) {
     constexpr uint16_t kPort = 45002;
-    OrderBook book(10000, 500);
-    book.add_order(7, Side::Bid, 9995, 100);
-
-    FeedHandler handler(book, kPort);
+    SpscQueue<FeedMessage, 1024> queue;
+    FeedHandler handler(queue, kPort);
 
     CancelMessage msg;
     msg.sequence = 0;
@@ -72,13 +78,18 @@ TEST(FeedHandlerEndToEnd, ReceivesCancelMessageAndRemovesOrder) {
 
     handler.run_for(1);
 
-    EXPECT_FALSE(book.best_bid_price().has_value());
+    auto popped = queue.pop();
+    ASSERT_TRUE(popped.has_value());
+    ASSERT_TRUE(std::holds_alternative<CancelMessage>(*popped));
+
+    const auto& cancel = std::get<CancelMessage>(*popped);
+    EXPECT_EQ(cancel.id, 7u);
 }
 
 TEST(FeedHandlerEndToEnd, ProcessesMultipleMessagesInSequence) {
     constexpr uint16_t kPort = 45003;
-    OrderBook book(10000, 500);
-    FeedHandler handler(book, kPort);
+    SpscQueue<FeedMessage, 1024> queue;
+    FeedHandler handler(queue, kPort);
 
     AddMessage add1;
     add1.sequence = 0;
@@ -104,14 +115,21 @@ TEST(FeedHandlerEndToEnd, ProcessesMultipleMessagesInSequence) {
     send_udp(kPort, buf2, sizeof(buf2));
     handler.run_for(1);
 
-    ASSERT_TRUE(book.best_ask_price().has_value());
-    EXPECT_EQ(*book.best_ask_price(), 10002);
+    auto first = queue.pop();
+    ASSERT_TRUE(first.has_value());
+    ASSERT_TRUE(std::holds_alternative<AddMessage>(*first));
+    EXPECT_EQ(std::get<AddMessage>(*first).id, 1u);
+
+    auto second = queue.pop();
+    ASSERT_TRUE(second.has_value());
+    ASSERT_TRUE(std::holds_alternative<AddMessage>(*second));
+    EXPECT_EQ(std::get<AddMessage>(*second).id, 2u);
 }
 
 TEST(FeedHandlerSequencing, DetectsGapWhenSequenceSkips) {
     constexpr uint16_t kPort = 45004;
-    OrderBook book(10000, 500);
-    FeedHandler handler(book, kPort);
+    SpscQueue<FeedMessage, 1024> queue;
+    FeedHandler handler(queue, kPort);
 
     AddMessage msg;
     msg.sequence = 0;
@@ -134,13 +152,18 @@ TEST(FeedHandlerSequencing, DetectsGapWhenSequenceSkips) {
 
     EXPECT_EQ(handler.gaps_detected(), 1u);
     EXPECT_EQ(handler.duplicates_dropped(), 0u);
-    ASSERT_TRUE(book.best_bid_price().has_value());
+
+    // both messages should still have been pushed -- gap detection doesn't drop them
+    auto first = queue.pop();
+    ASSERT_TRUE(first.has_value());
+    auto second = queue.pop();
+    ASSERT_TRUE(second.has_value());
 }
 
 TEST(FeedHandlerSequencing, DropsDuplicateMessage) {
     constexpr uint16_t kPort = 45005;
-    OrderBook book(10000, 500);
-    FeedHandler handler(book, kPort);
+    SpscQueue<FeedMessage, 1024> queue;
+    FeedHandler handler(queue, kPort);
 
     AddMessage msg;
     msg.sequence = 0;
@@ -155,10 +178,16 @@ TEST(FeedHandlerSequencing, DropsDuplicateMessage) {
     send_udp(kPort, buf, sizeof(buf));
     handler.run_for(1);
 
-    // Resend the exact same sequence number 
+    // Resend the exact same sequence number
     send_udp(kPort, buf, sizeof(buf));
     handler.run_for(1);
 
     EXPECT_EQ(handler.duplicates_dropped(), 1u);
     EXPECT_EQ(handler.gaps_detected(), 0u);
+
+    // only the first copy should have reached the queue
+    auto first = queue.pop();
+    ASSERT_TRUE(first.has_value());
+    auto second = queue.pop();
+    EXPECT_FALSE(second.has_value());
 }

@@ -8,7 +8,7 @@
 
 namespace engine {
 
-FeedHandler::FeedHandler(OrderBook& book, uint16_t port) : book_(book) {
+FeedHandler::FeedHandler(SpscQueue<FeedMessage, 1024>& queue, uint16_t port) : queue_(queue) {
     setup_socket(port);
 
     if (io_uring_queue_init(8, &ring_, 0) < 0) {
@@ -61,10 +61,10 @@ void FeedHandler::process_message(const uint8_t* data, size_t len) {
 
     if (type == MessageType::Add && len >= ADD_MESSAGE_SIZE) {
         AddMessage msg = decode_add_message(data);
-        book_.add_order(msg.id, msg.side, msg.price_ticks, msg.quantity);
+        queue_.push(FeedMessage{msg});
     } else if (type == MessageType::Cancel && len >= CANCEL_MESSAGE_SIZE) {
         CancelMessage msg = decode_cancel_message(data);
-        book_.cancel_order(msg.id);
+        queue_.push(FeedMessage{msg});
     }
 }
 
