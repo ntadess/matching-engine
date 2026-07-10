@@ -31,6 +31,7 @@ add_library(engine_core
   include/spsc_queue.hpp
   src/matching_thread.cpp
   src/engine.cpp
+  include/latency_recorder.hpp
 
 
 )
@@ -39,7 +40,7 @@ target_link_libraries(engine_core PUBLIC ${URING_LIBRARIES})
 
 # --- Tests ---
 enable_testing()
-add_executable(engine_tests tests/order_book_test.cpp tests/messages_test.cpp tests/feed_handler_test.cpp tests/spsc_queue_test.cpp tests/matching_thread_test.cpp tests/engine_test.cpp)
+add_executable(engine_tests tests/order_book_test.cpp tests/messages_test.cpp tests/feed_handler_test.cpp tests/spsc_queue_test.cpp tests/matching_thread_test.cpp tests/engine_test.cpp tests/latency_reorder_test.cpp)
 target_link_libraries(engine_tests PRIVATE engine_core gtest_main)
 include(GoogleTest)
 gtest_discover_tests(engine_tests)
