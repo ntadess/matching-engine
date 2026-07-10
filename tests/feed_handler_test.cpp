@@ -155,7 +155,7 @@ TEST(FeedHandlerSequencing, DropsDuplicateMessage) {
     send_udp(kPort, buf, sizeof(buf));
     handler.run_for(1);
 
-    // Resend the exact same sequence number (simulates a retransmit/dup).
+    // Resend the exact same sequence number 
     send_udp(kPort, buf, sizeof(buf));
     handler.run_for(1);
 
