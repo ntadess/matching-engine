@@ -57,6 +57,17 @@ public:
         });
     }
 
+    // latency_recorder.hpp, public section
+size_t complete_count() const {
+    size_t count = 0;
+    for (const auto& t : timestamps_) {
+        if (is_complete(t)) ++count;
+    }
+    return count;
+}
+size_t total_slots() const { return timestamps_.size(); }
+
+
 private:
     std::vector<MessageTimestamps> timestamps_;
 

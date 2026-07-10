@@ -4,7 +4,7 @@
 #include <liburing.h>
 #include <atomic>
 #include <thread>
-
+#include <pthread.h>
 #include "spsc_queue.hpp"   
 #include "messages.hpp"
 #include "latency_recorder.hpp"
@@ -24,7 +24,7 @@ public:
     uint64_t gaps_detected() const { return gaps_detected_; }
     uint64_t duplicates_dropped() const { return duplicates_dropped_; }
 
-    void start();
+    void start(int cpu_core = -1);
     void stop();
 
 private:
@@ -37,11 +37,16 @@ private:
     uint64_t expected_sequence_ = 0;
     uint64_t gaps_detected_ = 0;
     uint64_t duplicates_dropped_ = 0;
+    static constexpr int kNumBuffers = 8;
+
+    std::array<std::array<uint8_t, ADD_MESSAGE_SIZE>, kNumBuffers> buffers_{};
+    void submit_read(uint8_t* buffer, size_t buffer_len);
+    void submit_read_for_buffer(int buffer_index);
 
     bool check_sequence(uint64_t sequence);
 
     void setup_socket(uint16_t port);
-    void submit_read(uint8_t* buffer, size_t buffer_len);
+    
     void process_message(const uint8_t* buffer, size_t len);
 
     void run_forever();

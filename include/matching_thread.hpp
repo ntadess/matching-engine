@@ -9,6 +9,7 @@
 #include "messages.hpp"
 #include "order_book.hpp"
 #include "latency_recorder.hpp"
+#include <pthread.h>
 
 namespace engine {
 
@@ -20,7 +21,7 @@ public:
     MatchingThread(const MatchingThread&) = delete;
     MatchingThread& operator=(const MatchingThread&) = delete;
 
-    void start();   // launches the consumer thread
+    void start(int cpu_core = -1);   // launches the consumer thread
     void stop();    // joins the thread
     ~MatchingThread();
 

@@ -119,6 +119,8 @@ int main(int argc, char** argv) {
         std::chrono::duration<double>(send_end - run_start).count();
     double achieved_rate = message_count / actual_duration_sec;
 
+    
+
     // ---- report ----
     std::cout << "\n=== Benchmark Results ===\n";
     std::cout << "messages sent:    " << message_count << "\n";
@@ -127,6 +129,11 @@ int main(int argc, char** argv) {
 
     const auto& rec = engine.recorder();
 
+    size_t complete = rec.complete_count();
+    double loss_pct = 100.0 * (1.0 - static_cast<double>(complete) / message_count);
+
+    std::cout << "messages measured: " << complete << " / " << message_count
+            << " (" << loss_pct << "% not captured — dropped/incomplete)\n";
     std::cout << "-- wire-to-book (full pipeline) --\n";
     print_ns("  p50 ", rec.wire_to_book_percentile(0.50));
     print_ns("  p99 ", rec.wire_to_book_percentile(0.99));

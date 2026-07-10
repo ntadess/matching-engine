@@ -18,7 +18,8 @@ public:
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
 
-    void start();
+    // engine.hpp
+    void start(int cpu_core = -1);   // change signature
     void stop();
 
     const OrderBook& book() const {return book_;}

@@ -10,9 +10,10 @@ Engine::Engine(uint16_t port, int32_t reference_price_ticks, int32_t window_tick
       feed_handler_(queue_, port, &recorder_),
       matcher_(queue_, book_, &recorder_) {}
 
-void Engine::start() {
-    matcher_.start();       // consumer first
-    feed_handler_.start();  // producer second
+// engine.cpp
+void Engine::start(int cpu_core) {
+    matcher_.start(cpu_core);
+    feed_handler_.start(cpu_core);
 }
 
 void Engine::stop() {

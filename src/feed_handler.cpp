@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <array>
 
 namespace engine {
 
@@ -42,11 +43,6 @@ void FeedHandler::setup_socket(uint16_t port) {
     }
 }
 
-void FeedHandler::submit_read(uint8_t* buffer, size_t buffer_len) {
-    io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-    io_uring_prep_recv(sqe, socket_fd_, buffer, buffer_len, 0);
-    io_uring_submit(&ring_);
-}
 
 void FeedHandler::process_message(const uint8_t* data, size_t len) {
     if (len == 0) {
@@ -106,9 +102,17 @@ bool FeedHandler::check_sequence(uint64_t sequence) {
 }
 
 
-void FeedHandler::start() {
+// feed_handler.cpp
+void FeedHandler::start(int cpu_core) {
     running_.store(true, std::memory_order_relaxed);
     producer_thread_ = std::thread(&FeedHandler::run_forever, this);
+
+    if (cpu_core >= 0) {
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(cpu_core, &cpuset);
+        pthread_setaffinity_np(producer_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
+    }
 }
 
 void FeedHandler::stop() {
@@ -118,28 +122,56 @@ void FeedHandler::stop() {
     }
 }
 
+
+void FeedHandler::submit_read(uint8_t* buffer, size_t buffer_len) {
+    io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+    io_uring_prep_recv(sqe, socket_fd_, buffer, buffer_len, 0);
+    io_uring_submit(&ring_);
+}
+
+void FeedHandler::submit_read_for_buffer(int buffer_index) {
+    io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+    if (!sqe) {
+        // submission queue full -- shouldn't normally happen at steady
+        // 1-in/1-out balance, but guard rather than crash
+        return;
+    }
+    io_uring_prep_recv(sqe, socket_fd_, buffers_[buffer_index].data(),
+                        buffers_[buffer_index].size(), 0);
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<intptr_t>(buffer_index)));
+    io_uring_submit(&ring_);
+}
+
 void FeedHandler::run_forever() {
-    uint8_t buffer[ADD_MESSAGE_SIZE];
+    // prime the pipe: submit ALL buffers' reads up front, so kNumBuffers
+    // reads are in flight simultaneously before we wait on anything
+    for (int i = 0; i < kNumBuffers; ++i) {
+        submit_read_for_buffer(i);
+    }
 
     while (running_.load(std::memory_order_relaxed)) {
-        submit_read(buffer, sizeof(buffer));
-
         io_uring_cqe* cqe;
         __kernel_timespec ts{.tv_sec = 0, .tv_nsec = 100'000'000};  // 100ms
         int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
 
         if (ret == -ETIME) {
-            continue;
+            continue;  // no completion yet, recheck running_
         }
 
+        int buffer_index = static_cast<int>(reinterpret_cast<intptr_t>(io_uring_cqe_get_data(cqe)));
         int bytes_read = cqe->res;
+
         if (bytes_read > 0) {
-            process_message(buffer, static_cast<size_t>(bytes_read));
+            process_message(buffers_[buffer_index].data(), static_cast<size_t>(bytes_read));
         }
 
         io_uring_cqe_seen(&ring_, cqe);
+
+        // immediately resubmit a read on this same buffer -- keeps
+        // kNumBuffers reads continuously in flight rather than draining
+        // to zero and refilling in lockstep
+        submit_read_for_buffer(buffer_index);
     }
 }
-
 
 }  // namespace engine

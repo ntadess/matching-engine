@@ -8,9 +8,17 @@ MatchingThread::MatchingThread(SpscQueue<FeedMessage, 1024>& queue, OrderBook& b
                                 LatencyRecorder* recorder)
     : queue_(queue), book_(book), recorder_(recorder) {}
 
-void MatchingThread::start() {
+// matching_thread.cpp
+void MatchingThread::start(int cpu_core) {
     running_.store(true, std::memory_order_relaxed);
     matcher_thread_ = std::thread(&MatchingThread::run, this);
+
+    if (cpu_core >= 0) {
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(cpu_core, &cpuset);
+        pthread_setaffinity_np(matcher_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
+    }
 }
 
 void MatchingThread::stop() {
