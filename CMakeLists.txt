@@ -30,6 +30,8 @@ add_library(engine_core
   src/feed_handler.cpp
   include/spsc_queue.hpp
   src/matching_thread.cpp
+  src/engine.cpp
+
 
 )
 target_include_directories(engine_core PUBLIC include ${URING_INCLUDE_DIRS})
@@ -37,7 +39,7 @@ target_link_libraries(engine_core PUBLIC ${URING_LIBRARIES})
 
 # --- Tests ---
 enable_testing()
-add_executable(engine_tests tests/order_book_test.cpp tests/messages_test.cpp tests/feed_handler_test.cpp tests/spsc_queue_test.cpp tests/matching_thread_test.cpp)
+add_executable(engine_tests tests/order_book_test.cpp tests/messages_test.cpp tests/feed_handler_test.cpp tests/spsc_queue_test.cpp tests/matching_thread_test.cpp tests/engine_test.cpp)
 target_link_libraries(engine_tests PRIVATE engine_core gtest_main)
 include(GoogleTest)
 gtest_discover_tests(engine_tests)

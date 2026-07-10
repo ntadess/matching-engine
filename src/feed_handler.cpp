@@ -99,4 +99,40 @@ bool FeedHandler::check_sequence(uint64_t sequence) {
 }
 
 
+void FeedHandler::start() {
+    running_.store(true, std::memory_order_relaxed);
+    producer_thread_ = std::thread(&FeedHandler::run_forever, this);
+}
+
+void FeedHandler::stop() {
+    running_.store(false, std::memory_order_relaxed);
+    if (producer_thread_.joinable()) {
+        producer_thread_.join();
+    }
+}
+
+void FeedHandler::run_forever() {
+    uint8_t buffer[ADD_MESSAGE_SIZE];
+
+    while (running_.load(std::memory_order_relaxed)) {
+        submit_read(buffer, sizeof(buffer));
+
+        io_uring_cqe* cqe;
+        __kernel_timespec ts{.tv_sec = 0, .tv_nsec = 100'000'000};  // 100ms
+        int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
+
+        if (ret == -ETIME) {
+            continue;
+        }
+
+        int bytes_read = cqe->res;
+        if (bytes_read > 0) {
+            process_message(buffer, static_cast<size_t>(bytes_read));
+        }
+
+        io_uring_cqe_seen(&ring_, cqe);
+    }
+}
+
+
 }  // namespace engine

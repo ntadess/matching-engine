@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <liburing.h>
+#include <atomic>
+#include <thread>
 
 #include "spsc_queue.hpp"   // was: order_book.hpp
 #include "messages.hpp"
@@ -20,6 +22,10 @@ public:
 
     uint64_t gaps_detected() const { return gaps_detected_; }
     uint64_t duplicates_dropped() const { return duplicates_dropped_; }
+
+    void start();
+    void stop();
+
 private:
     SpscQueue<FeedMessage, 1024>& queue_;   
     int socket_fd_ = -1;
@@ -34,5 +40,9 @@ private:
     void setup_socket(uint16_t port);
     void submit_read(uint8_t* buffer, size_t buffer_len);
     void process_message(const uint8_t* buffer, size_t len);
+
+    void run_forever();
+    std::thread producer_thread_;
+    std::atomic<bool> running_ {false};
 };
 }  // namespace engine
