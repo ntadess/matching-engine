@@ -41,10 +41,53 @@ processing is no longer blocked in a single synchronous wait-then-process
 cycle. Not confirmed as the root mechanism, but the negative p50 issue
 did not recur once switched to the overlapped design.
 
+## Phase 6: Profiling
+
+Profiled a full benchmark run (`perf record -g`, 100,000 messages,
+20,000 msg/sec) to identify optimization targets before making any
+changes.
+
+**Finding: no single function dominates CPU time.** Highest self-time
+entries were all under 0.5%: `main` (0.43%), `syscall` (0.35%),
+`__vdso_clock_gettime` (0.35%), `std::sort`'s introsort loop (0.20%,
+attributable to `LatencyRecorder`'s percentile calculation, not the hot
+path), `OrderBook::add_order` (0.09%), `OrderBook::cancel_order` (0.08%).
+`OrderBook::recenter` did not register at all — either infrequent enough
+or cheap enough to not surface in a system-wide profile at this sample
+rate.
+
+**What the time actually goes to, in aggregate:**
+- **Clock reads** (`clock_gettime`, `__vdso_clock_gettime`,
+  `std::chrono::steady_clock::now`) appear repeatedly across the profile
+  and collectively represent a real, attributable cost — this is
+  `LatencyRecorder` itself: 4 timestamp calls per message at 20,000
+  msg/sec is 80,000 clock reads/sec. Self-inflicted measurement
+  overhead, not a flaw in the matching logic.
+- **io_uring wait functions and syscalls** (`io_uring_wait_cqe`,
+  `io_uring_wait_cqe_timeout`, `clock_nanosleep`) — expected: these are
+  intentional blocking waits (receive loop idling, generator pacing),
+  not wasted CPU.
+
+**Conclusion:** the order book and concurrency layer (`add_order`,
+`cancel_order`, `match_incoming_order`, the SPSC queue) are not the
+bottleneck — none of it shows up as a meaningful hotspot under profiling.
+Remaining latency is dominated by OS/syscall overhead inherent to the
+I/O path and the cost of the instrumentation itself, not by an
+inefficiency in the matching engine's core data structures or
+algorithms. No further optimization was pursued on this basis — chasing
+a fix for a bottleneck the data doesn't show would be optimizing without
+evidence.
+
 ## Reproducing
 
 ```bash
 cmake -B build -G Ninja
 cmake --build build --target benchmark_runner
 ./build/benchmark_runner <port> <message_count> [rate_per_sec]
+```
+
+Profiling:
+```bash
+perf record -g -o benchmark.perf.data -- ./build/benchmark_runner <port> <message_count> [rate_per_sec]
+perf report -i benchmark.perf.data
 ```
