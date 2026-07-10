@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <variant>
 #include "order_types.hpp"
 
 namespace engine {
@@ -24,6 +25,8 @@ struct CancelMessage {
     uint64_t sequence;
     uint64_t id;
 };
+
+using FeedMessage = std::variant<AddMessage, CancelMessage>;
 
 constexpr size_t ADD_MESSAGE_SIZE = 26;
 constexpr size_t CANCEL_MESSAGE_SIZE = 17;
